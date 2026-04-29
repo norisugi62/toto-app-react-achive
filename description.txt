@@ -1,0 +1,11 @@
+src/
+  assets/        // 画像・フォントなど
+  components/    // 小さな再利用UI
+  features/      // 機能単位（Todo, Authなど）
+  pages/         // 画面単位（必要なら）
+  hooks/          // カスタムhooks
+  utils/          // 汎用関数
+  services/       // API通信
+  styles/         // 全体SCSS（重要）
+
+階層構造です。これを参考に作っていくといいかもです。
