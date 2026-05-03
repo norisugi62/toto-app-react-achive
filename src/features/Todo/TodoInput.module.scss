@@ -1,0 +1,25 @@
+// @use '@styles/global' as g;
+.input {
+  width: 100%;
+  height: 30px;
+  background-color: #c6e5d0;
+  margin: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.field {
+  border-radius: 8px;
+  border: none;
+  padding: 6px 16px;
+  &::placeholder {
+    color: var(--text-h);
+  }
+}
+
+.primary {
+  color: plum;
+}

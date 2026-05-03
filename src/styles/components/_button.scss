@@ -1,0 +1,20 @@
+.button {
+  border-radius: 8px;
+  border: none;
+  padding: 4px 16px;
+  &:hover {
+    background-color: #79a8a9;
+    color: var(--text-h);
+    cursor: pointer;
+  }
+}
+
+.button-icon {
+  filter: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .button-icon--invert {
+    filter: invert(1) brightness(2);
+  }
+}
