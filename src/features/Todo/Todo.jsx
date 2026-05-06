@@ -59,18 +59,35 @@ const moveTodoWithinStatus = ({ todos, id, offset, status }) => {
   return normalizeOrder(tempTodos);
 };
 
+const useConfig = (value) => {
+  const [config, setConfig] = useState(value);
+  useEffect(() => {
+    fetch('/config.json')
+      .then((res) => res.json())
+      .then((data) => setConfig(data));
+  }, []);
+  return config;
+};
+
 // * ==========================================
 // * Todo
 // * ==========================================
 
 const Todo = () => {
+  const config = useConfig(null);
   const [todos, setTodos] = useLocalStorage('todos', []);
+
+  if (!config) return <p>loading...</p>;
+
   const sortedTodos = [...todos].sort((a, b) => a.order - b.order);
   const incompleteTodos = filterTodosByStatus(sortedTodos, 'incomplete');
   const completeTodos = filterTodosByStatus(sortedTodos, 'complete');
+  const MAX_TODOS = config?.MAX_TODOS ?? 7; // 念の為の保険
+  const isLimitReached = todos.length >= MAX_TODOS;
 
   // * 新しいtodoを追加する処理
   const handleAddTodo = (text) => {
+    if (isLimitReached) return;
     const maxOrder = todos.length ? Math.max(...todos.map((t) => t.order)) : 0;
 
     const newTodo = {
@@ -118,7 +135,8 @@ const Todo = () => {
 
   return (
     <div className={styles.todo}>
-      <TodoInput onAddTodo={handleAddTodo} />
+      <TodoInput onAddTodo={handleAddTodo} disabled={isLimitReached} />
+      {isLimitReached && <p style={{ color: 'red' }}>登録できるTODOは7個までです。</p>}
       <IncompleteTodoList todos={incompleteTodos} actions={todoAction} />
       <CompleteTodoList todos={completeTodos} actions={todoAction} />
     </div>

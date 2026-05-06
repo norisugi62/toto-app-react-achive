@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import styles from './TodoInput.module.scss';
 
-const TodoInput = ({ onAddTodo }) => {
+const TodoInput = ({ onAddTodo, disabled }) => {
   const [text, setText] = useState('');
 
   // buttonで登録
@@ -29,8 +29,9 @@ const TodoInput = ({ onAddTodo }) => {
         placeholder="TODOを入力"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
+        disabled={disabled}
       ></input>
-      <button className={`button ${styles.primary}`} onClick={handleClick}>
+      <button className={`button ${styles.primary}`} disabled={disabled} onClick={handleClick}>
         追加
       </button>
     </div>
