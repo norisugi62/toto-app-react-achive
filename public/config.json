@@ -1,4 +1,7 @@
 {
   "_comment": "TODOの最大数",
-  "MAX_TODOS": 7
+  "MAX_TODOS": 7,
+
+  "_comment": "ドラッグ判定閾値",
+  "DRAG_THRESHOLD": 5
 }

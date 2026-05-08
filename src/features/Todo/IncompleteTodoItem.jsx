@@ -3,7 +3,7 @@ const IncompleteTodoItem = ({ todo, actions }) => {
   const { text, id, status } = todo;
 
   return (
-    <li className="todo-item">
+    <li className="todo-item" data-id={id}>
       <div className="item-content">
         <p className="item-text">{text}</p>
         <button className="button" onClick={() => onMoveUp(id, status)}>

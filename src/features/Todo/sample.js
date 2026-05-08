@@ -172,6 +172,14 @@ export default class TodoApp {
     return { fromId, toId, shouldInsertAfter };
   }
 
+  calculateInsertIndex({ fromIndex, toIndex, shouldInsertAfter }) {
+    const isMovingDown = fromIndex < toIndex;
+    if (isMovingDown) {
+      return shouldInsertAfter ? toIndex : toIndex - 1;
+    } else {
+      return shouldInsertAfter ? toIndex + 1 : toIndex;
+    }
+  }
   // * handlePointerDropの中でデータを集める関数
   getPointerDropContext({ el, clientY }) {
     const target = this.getTodoItem(el);
@@ -256,6 +264,7 @@ export default class TodoApp {
   handleDeleteItem(button) {
     const id = this.getTodoIdFromElement(button);
     if (id === null) return;
+
     const newTodos = this.todos.filter((todo) => todo.id !== id);
     if (this.todos.length === newTodos.length) return;
     this.todos = newTodos;
@@ -390,12 +399,43 @@ export default class TodoApp {
     }
   }
 
+  reorderByDrop({ fromId, toId, shouldInsertAfter, list }) {
+    const toIndex = this.getIndexById({ id: toId, list });
+    const fromIndex = this.getIndexById({ id: fromId, list });
+    if (fromIndex === -1 || toIndex === -1) return list;
+
+    const insertIndex = this.calculateInsertIndex({ fromIndex, toIndex, shouldInsertAfter });
+    if (fromIndex === insertIndex) return list;
+    return this.moveTodos({ fromIndex, toIndex, list });
+  }
+
+  calculateInsertIndex({ fromIndex, toIndex, shouldInsertAfter }) {
+    const isMovingDown = fromIndex < toIndex;
+    if (isMovingDown) {
+      return shouldInsertAfter ? toIndex : toIndex - 1;
+    } else {
+      return shouldInsertAfter ? toIndex + 1 : toIndex;
+    }
+  }
+  // * handlePointerDropの中でデータを集める関数
+  getPointerDropContext({ el, clientY }) {
+    const target = this.getTodoItem(el);
+    if (target === null) return null;
+    const toId = this.getTodoId(target);
+    if (toId === null) return null;
+    const fromId = this.draggedId;
+    if (fromId === null) return null;
+    const rect = target.getBoundingClientRect(); // 位置情報取得
+    const middleY = rect.top + rect.height / 2; // 対象の真ん中のY座標取得
+    const shouldInsertAfter = clientY > middleY; // 後ろに挿入すべきか?
+    return { fromId, toId, shouldInsertAfter };
+  }
+
   // * pointerでドラッグ判定したとき一度だけする処理
   startPointerDrag(e) {
     this.isDragging = true;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    /
   }
 
   handlePointerCancel() {
