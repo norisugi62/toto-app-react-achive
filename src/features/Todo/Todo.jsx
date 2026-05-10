@@ -38,9 +38,27 @@ const useConfig = (value) => {
   return config;
 };
 
+// * idからtodoを取得する
+const getTodoById = ({ todos, id }) => {
+  return todos.find((todo) => todo.id === id);
+};
+
+// * idからtodoIndexを取得する
+const getTodoIndexById = ({ list, id }) => {
+  return list.findIndex((todo) => todo.id === id);
+};
+
+// * todosをsortさせる
+const sortTodosByOrder = ({ list, direction = 'asc' }) => {
+  const sorted = [...list].sort((a, b) => {
+    return direction === 'asc' ? a.order - b.order : b.order - a.order;
+  });
+  return sorted;
+};
+
 // * orderの再設定
 const normalizeOrder = (todos) => {
-  const sorted = [...todos].sort((a, b) => a.order - b.order);
+  const sorted = sortTodosByOrder({ list: todos });
   const orderMap = new Map();
   sorted.forEach((todo, index) => {
     orderMap.set(todo.id, index + 1); // Mapにidをkeyとしてindex + 1でorderとなる値を保存
@@ -59,12 +77,14 @@ const updateTodoStatus = ({ todos, id, status }) => {
   return todos.map((todo) => (todo.id === id ? { ...todo, status } : todo));
 };
 
-// * todoの移動
+// * todoのbutton移動
 const moveTodoWithinStatus = ({ todos, id, offset, status }) => {
-  const sorted = [...todos].sort((a, b) => a.order - b.order);
-  const list = sorted.filter((todo) => todo.status === status);
+  const sorted = sortTodosByOrder({ list: todos });
 
-  const index = list.findIndex((todo) => todo.id === id);
+  const list = filterTodosByStatus(sorted, status);
+
+  const index = getTodoIndexById({ list, id });
+
   if (index === -1) return todos;
 
   const targetIndex = index + offset;
@@ -95,12 +115,12 @@ const Todo = () => {
 
   if (!config) return <p>loading...</p>;
 
-  const sortedTodos = [...todos].sort((a, b) => a.order - b.order);
+  const sortedTodos = sortTodosByOrder({ list: todos });
   const incompleteTodos = filterTodosByStatus(sortedTodos, 'incomplete');
   const completeTodos = filterTodosByStatus(sortedTodos, 'complete');
+  const DRAG_THRESHOLD = config?.DRAG_THRESHOLD ?? 5; // 念の為の保険
   const MAX_TODOS = config?.MAX_TODOS ?? 7; // 念の為の保険
   const isLimitReached = todos.length >= MAX_TODOS;
-  const DRAG_THRESHOLD = config?.DRAG_THRESHOLD ?? 5; // 念の為の保険
 
   // * 新しいtodoを追加する処理
   const handleAddTodo = (text) => {
@@ -137,6 +157,13 @@ const Todo = () => {
     setTodos((prevTodos) => moveTodoWithinStatus({ todos: prevTodos, id, offset: -1, status }));
   };
 
+  // * pointerの位置がtarget中央より下かどうかを取得する
+  const getShouldInsertAfter = ({ target, clientY }) => {
+    const rect = target.getBoundingClientRect(); // 位置情報取得
+    const middleY = rect.top + rect.height / 2; // 対象の真ん中のY座標取得
+    return clientY > middleY; // 中央の座標より大きいなら超えた(true)
+  };
+
   // * todoの並びを下に移動させる
   const handleMoveDown = (id, status) => {
     setTodos((prevTodos) => moveTodoWithinStatus({ todos: prevTodos, id, offset: 1, status }));
@@ -156,11 +183,11 @@ const Todo = () => {
     if (e.target.closest('button')) return; // ボタンの時はガード
     const context = createPointerDragContext(e);
     if (!context) return;
-    draggedIdRef.current = context.id;
+    draggedIdRef.current = context.draggedId;
     startYRef.current = context.startY;
   };
 
-  const startPointerDragIfNedded = ({ e, startY, isDragging }) => {
+  const startPointerDragIfNeeded = ({ e, startY, isDragging }) => {
     if (isDragging) return false;
     const currentY = e.clientY;
     const shouldStart = Math.abs(currentY - startY) > DRAG_THRESHOLD;
@@ -170,7 +197,7 @@ const Todo = () => {
 
   const handlePointerMove = (e) => {
     if (draggedIdRef.current === null) return;
-    const dragStarted = startPointerDragIfNedded({ e, startY: startYRef.current, isDragging: isDraggingRef.current });
+    const dragStarted = startPointerDragIfNeeded({ e, startY: startYRef.current, isDragging: isDraggingRef.current });
     if (dragStarted) {
       isDraggingRef.current = true;
       e.preventDefault();
@@ -179,59 +206,83 @@ const Todo = () => {
     console.log('drag中');
   };
 
-  const getReorderedTodosByPointerDrop = () => {
-    // getReorderedTodosByPointerDrop(e);
+  const cleanupPointerDrag = (e) => {
+    draggedIdRef.current = null;
+    isDraggingRef.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const getPointerDropContext = (e) => {
+    if (!isDraggingRef.current) return null;
+    if (draggedIdRef.current === null) return null;
+
+    // pointer座標上にある実際の要素を取得
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!el) return null;
+
+    const item = el.closest('[data-id]');
+    if (!item) return null;
+
+    const toId = Number(item.dataset.id);
+    if (Number.isNaN(toId)) return null;
+
+    const fromId = draggedIdRef.current;
+    return { fromId, toId, targetItem: item };
+  };
+
+  const reorderTodosByPointerDrop = ({ todos, context, clientY }) => {
+    const { fromId, toId, targetItem } = context;
+    const draggedTodo = getTodoById({ todos, id: fromId });
+    if (!draggedTodo) return todos;
+    const { status } = draggedTodo;
+
+    const sorted = sortTodosByOrder({ list: todos });
+    const list = filterTodosByStatus(sorted, status);
+    const fromIndex = getTodoIndexById({ list, id: fromId });
+    const toIndex = getTodoIndexById({ list, id: toId });
+    if (fromIndex === -1 || toIndex === -1) return todos;
+    const shouldInsertAfter = getShouldInsertAfter({ target: targetItem, clientY });
+
+    let insertIndex;
+
+    // 上移動か下移動かでinsert位置が変わる
+    const isMovingDown = fromIndex < toIndex;
+
+    if (isMovingDown) {
+      insertIndex = shouldInsertAfter ? toIndex : toIndex - 1;
+    } else {
+      insertIndex = shouldInsertAfter ? toIndex + 1 : toIndex;
+    }
+
+    if (fromIndex === insertIndex) return todos;
+
+    const offset = insertIndex - fromIndex;
+    const current = list[fromIndex];
+    const target = list[insertIndex];
+
+    const tempTodos = todos.map((todo) => {
+      if (todo.id === current.id) {
+        return { ...todo, order: target.order + (offset > 0 ? 0.1 : -0.1) };
+      }
+      return todo;
+    });
+    return normalizeOrder(tempTodos);
   };
 
   const handlePointerUp = (e) => {
     try {
-      if (!isDraggingRef.current) return;
-
-      if (draggedIdRef.current === null) return;
-
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el) return;
-
-      const item = el.closest('[data-id]');
-      if (item === null) return;
-
-      const toId = Number(item.dataset.id);
-      if (Number.isNaN(toId)) return;
-
-      const fromId = draggedIdRef.current;
-      if (fromId === null) return;
-
-      const rect = item.getBoundingClientRect(); // 位置情報取得
-      const middleY = rect.top + rect.height / 2; // 対象の真ん中のY座標取得
-      const shouldInsertAfter = e.clientY > middleY; // 後ろに挿入すべきか?
-
-      const toIndex = todos.findIndex((todo) => todo.id === toId);
-      const fromIndex = todos.findIndex((todo) => todo.id === fromId);
-      if (fromIndex === -1 || toIndex === -1) return;
-
-      let insertIndex;
-      const isMovingDown = fromIndex < toIndex;
-      if (isMovingDown) {
-        insertIndex = shouldInsertAfter ? toIndex : toIndex - 1;
-      } else {
-        insertIndex = shouldInsertAfter ? toIndex + 1 : toIndex;
-      }
-      if (fromIndex === insertIndex) return;
-
-      setTodos((prevTodos) => moveTodoWithinStatus({ todos: prevTodos, id, offset: -1, status }));
+      const dropContext = getPointerDropContext(e);
+      if (!dropContext) return;
+      setTodos((prevTodos) => reorderTodosByPointerDrop({ todos: prevTodos, context: dropContext, clientY: e.clientY }));
     } finally {
-      draggedIdRef.current = null;
-      isDraggingRef.current = false;
-      e.currentTarget.releasePointerCapture(e.pointerId);
+      // drag状態をリセット
+      cleanupPointerDrag(e);
     }
-
-    console.log('pu');
   };
 
-  const handlePointerCancel = () => {
-    draggedIdRef.current = null;
-    isDraggingRef.current = false;
-    console.log('pc');
+  const handlePointerCancel = (e) => {
+    // drag状態をリセット
+    cleanupPointerDrag(e);
   };
 
   const todoAction = {
@@ -243,7 +294,7 @@ const Todo = () => {
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
-    onPointercancel: handlePointerCancel,
+    onPointerCancel: handlePointerCancel,
   };
 
   return (
